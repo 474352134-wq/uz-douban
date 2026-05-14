@@ -2,25 +2,26 @@
 //@name:豆瓣影视
 //@webSite:https://movie.douban.com
 //@version:1
-//@remark:豆瓣搜索/高分推荐源
+//@remark:豆瓣电影/剧集搜索源
 //@isAV:0
 //@deprecated:0
 // ignore
 {
   "name": "豆瓣影视",
   "type": 101,
-  "api": "https://movie.douban.com/j",
-  "search": "/search_subject?q={kw}&type=all",
+  "api": "https://m.douban.com/j",
+  "home": "/search?type=movie&tag=热门&start=0&count=20",
+  "search": "/search?type=movie&q={kw}&start=0&count=20",
   "headers": {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Referer": "https://movie.douban.com/"
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    "Referer": "https://m.douban.com/"
   },
   "result": {
-    "list": "$.subjects",
-    "title": "$.title",
-    "cover": "$.cover.url",
-    "year": "$.year",
-    "rating": "$.rating.value",
+    "list": "$.items",
+    "vod_name": "$.title",
+    "vod_pic": "$.pic",
+    "vod_year": "$.year",
+    "vod_score": "$.rating.value",
     "vod_id": "$.id"
   }
 }
