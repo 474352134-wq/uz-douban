@@ -1,27 +1,9 @@
 // ignore
 //@name:豆瓣影视
-//@webSite:https://movie.douban.com
+//@webSite:https://m.douban.com
 //@version:1
-//@remark:豆瓣电影/剧集搜索源
+//@remark:可用豆瓣搜索源
 //@isAV:0
 //@deprecated:0
 // ignore
-{
-  "name": "豆瓣影视",
-  "type": 101,
-  "api": "https://m.douban.com/j",
-  "home": "/search?type=movie&tag=热门&start=0&count=20",
-  "search": "/search?type=movie&q={kw}&start=0&count=20",
-  "headers": {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Referer": "https://m.douban.com/"
-  },
-  "result": {
-    "list": "$.items",
-    "vod_name": "$.title",
-    "vod_pic": "$.pic",
-    "vod_year": "$.year",
-    "vod_score": "$.rating.value",
-    "vod_id": "$.id"
-  }
-}
+{"name":"豆瓣影视","type":101,"api":"https://m.douban.com/j","home":"/search?type=movie&tag=热门&count=20","search":"/search?type=movie&q={kw}","headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1","Referer":"https://m.douban.com/"},"result":{"list":"$.items","vod_name":"$.title","vod_pic":"$.pic","vod_year":"$.year","vod_score":"$.rating","vod_id":"$.id"}}
