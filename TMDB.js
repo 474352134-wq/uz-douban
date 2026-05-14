@@ -1,7 +1,7 @@
 //@name:{LHM}TMDB视频源
-//@version:4
+//@version:5
 //@webSite:https://www.themoviedb.org/
-//@remark:使用TMDB API，年份筛选已覆盖至2026年
+//@remark:使用TMDB API，年份筛选已覆盖至2026年，修复网络与解析问题
 //@order:A01
 //@codeID:
 //@env:
@@ -49,9 +49,10 @@ import {
 import { cheerio, Crypto, Encrypt, JSONbig } from '../core/uz3lib.js'
 // ignore
 
+// 关键修改：使用已知国内可用的旧 API 域名
 var TMDB_API_KEY = '0c9ff73a2d99c4ece5f0134e2586c375';
 var TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
-var TMDB_API_BASE = 'https://api.themoviedb.org/3';
+var TMDB_API_BASE = 'https://api.tmdb.org/3';
 
 function makeYearList(start, end) {
     var years = [{ name: '全部', id: '' }];
@@ -81,7 +82,7 @@ async function getClassList(args) {
 }
 
 /**
- * 二级分类筛选列表（年份 + 排序）
+ * 二级分类筛选列表
  */
 async function getSubclassList(args) {
     var backData = new RepVideoSubclassList()
@@ -107,7 +108,7 @@ async function getSubclassList(args) {
 }
 
 /**
- * 获取分类视频列表（默认进入时调用）
+ * 获取分类视频列表（默认进入）
  */
 async function getVideoList(args) {
     var backData = new RepVideoList()
@@ -118,12 +119,13 @@ async function getVideoList(args) {
         backData.data = list
     } catch (error) {
         backData.error = error.toString()
+        toast('列表加载失败: ' + (error.message || error.toString()), 3)
     }
     return JSON.stringify(backData)
 }
 
 /**
- * 获取二级分类视频列表（点击筛选后调用）—— 这是之前缺失的关键函数
+ * 获取二级分类视频列表（筛选后）—— 关键函数
  */
 async function getSubclassVideoList(args) {
     var backData = new RepVideoList()
@@ -136,6 +138,7 @@ async function getSubclassVideoList(args) {
         backData.data = list
     } catch (error) {
         backData.error = error.toString()
+        toast('筛选列表加载失败: ' + (error.message || error.toString()), 3)
     }
     return JSON.stringify(backData)
 }
@@ -184,6 +187,7 @@ async function getVideoDetail(args) {
         backData.data = detail
     } catch (error) {
         backData.error = error.toString()
+        toast('详情请求失败: ' + (error.message || error.toString()), 3)
     }
     return JSON.stringify(backData)
 }
@@ -234,11 +238,12 @@ async function searchVideo(args) {
         }
     } catch (error) {
         backData.error = error.toString()
+        toast('搜索失败: ' + (error.message || error.toString()), 3)
     }
     return JSON.stringify(backData)
 }
 
-// ========== 辅助函数：请求 TMDB 列表 ==========
+// ========== 辅助函数：请求 TMDB 列表（修复版） ==========
 async function fetchTMDBList(type, page, year, sort) {
     var apiUrl = ''
     var isTV = false
@@ -267,6 +272,9 @@ async function fetchTMDBList(type, page, year, sort) {
         }
     }
 
+    // 调试：可以在这里弹出请求的地址，检查参数是否正确
+    // toast('请求地址: ' + apiUrl, 2)
+
     var resp = await req(apiUrl, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -274,7 +282,17 @@ async function fetchTMDBList(type, page, year, sort) {
         }
     })
 
+    // 检查响应状态
+    if (resp.statusCode !== 200) {
+        throw new Error('HTTP状态码: ' + resp.statusCode + '，响应内容: ' + (resp.data || '').substring(0, 100))
+    }
+
     var json = JSONbig.parse(resp.data || '{}')
+    // TMDB 有时会把错误信息放在 status_message 里
+    if (json.status_message) {
+        throw new Error('TMDB错误: ' + json.status_message)
+    }
+
     var results = json.results || []
     var list = []
 
