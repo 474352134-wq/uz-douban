@@ -1,5 +1,5 @@
 //@name:{LHM}豆瓣
-//@version:9
+//@version:10
 //@webSite:https://movie.douban.com
 //@remark:使用网页爬取的方式实现豆瓣视频源，已在年份过滤中加入 2026 年
 //@order:A01
