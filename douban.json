@@ -1,14 +1,14 @@
 {
   "name": "TMDB视频源",
   "codeID": "", 
-  "api": "https://raw.githubusercontent.com/474352134-wq/uz-douban/main/TMDB.js", 
-  "webSite": "https://www.themoviedb.org/", 
+  "api": "https://raw.githubusercontent.com/474352134-wq/uz-douban/main/douban.js", 
+  "webSite": "https://movie.douban.com", 
   "remark": "TMDB视频源，支持电影、电视剧、综艺、动漫、纪录片，年份筛选至2026年",
   "noHistory": false,
   "userAgent": "",
   "isLock": false,
   "blockClassList": [],
   "env": "",
-  "version": 8,
+  "version": 19,
   "type": 101
 }
