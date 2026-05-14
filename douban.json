@@ -4,7 +4,7 @@
   "remark": "红梅出品yo",
   "api": "https://raw.githubusercontent.com/474352134-wq/uz-douban/main/douban.js",
   "type": 100,
-  "webSite": "https://movie.douban.com",
+  "webSite": "https://www.themoviedb.org",
   "codeID": "",
   "env": "",
   "isAV": 0,
