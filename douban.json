@@ -1,6 +1,6 @@
 {
   "name": "{LHM}豆瓣",
-  "version": 8,
+  "version": 9,
   "remark": "红梅出品",
   "api": "https://raw.githubusercontent.com/474352134-wq/uz-douban/main/douban.js",
   "type": 101,
