@@ -1,7 +1,7 @@
 //@name:{LHM}豆瓣
-//@version:8
+//@version:9
 //@webSite:https://movie.douban.com
-//@remark:使用网页爬取的方式实现豆瓣视频源，已在年份过滤中加入 2026 年
+//@remark:使用网页爬取的方式实现豆瓣视频源，已在年份过滤中加入 2026 年（搜索 API 版）
 //@order:A01
 //@codeID:
 //@env:
@@ -194,8 +194,12 @@ async function getVideoList(args) {
       return vd
     })
     backData.data = list
+
+    // 调试：显示返回条数（可删）
+    toast(`豆瓣列表返回 ${list.length} 条`, 2)
   } catch (e) {
     backData.error = e.toString()
+    toast(`列表请求失败: ${e.message}`, 3)
   }
   return JSON.stringify(backData)
 }
@@ -235,8 +239,12 @@ async function getVideoDetail(args) {
     if (year) detail.vod_year = year
 
     backData.data = detail
+
+    // 调试：显示详情标题（可删）
+    toast(`详情: ${detail.vod_name}`, 2)
   } catch (e) {
     backData.error = e.toString()
+    toast(`详情请求失败: ${e.message}`, 3)
   }
   return JSON.stringify(backData)
 }
@@ -279,8 +287,12 @@ async function searchVideo(args) {
       return vd
     })
     backData.data = list
+
+    // 调试：显示搜索结果条数（可删）
+    toast(`搜索 "${kw}" 返回 ${list.length} 条`, 2)
   } catch (e) {
     backData.error = e.toString()
+    toast(`搜索请求失败: ${e.message}`, 3)
   }
   return JSON.stringify(backData)
 }
