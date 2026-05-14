@@ -3,7 +3,7 @@
   "version": 11,
   "remark": "红梅出品yo",
   "api": "https://raw.githubusercontent.com/474352134-wq/uz-douban/main/douban.js",
-  "type": 101,
+  "type": 100,
   "webSite": "https://movie.douban.com",
   "codeID": "",
   "env": "",
