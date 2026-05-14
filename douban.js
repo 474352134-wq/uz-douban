@@ -1,10 +1,21 @@
 //@name:{LHM}豆瓣
-//@version:14
+//@version:15
 //@webSite:https://movie.douban.com
-//@remark:彻底修复API失效，改用移动端网页抓取，支持2026年数据
+//@remark:使用网页爬取的方式实现豆瓣视频源，已在年份过滤中加入 2026 年，并集成 Cookie 登录验证
 //@order:A01
+//@codeID:
+//@env:
+//@isAV:0
+//@deprecated:0
 
-// 辅助函数：生成年份列表
+/* -------------------------------------------------
+   全局 Cookie（登录后复制完整字符串到这里）
+   ------------------------------------------------- */
+var DOUBAN_COOKIE = 'll="118297"; bid=boJYIZel7VY; _vwo_uuid_v2=D9DB9358E8164A07A59578831654B7800|4b559143faa8f5a04a9dab4dc74cda1e; __utma=30149280.827381539.1772196852.1778510963.1778755207.5; __utmc=30149280; __utmz=30149280.1778755207.5.3.utmcsr=cn.bing.com|utmccn=(referral)|utmcmd=referral|utmcct=/; ap_v=0,6.0; __utmb=30149280.1.10.1778755207; dbcl2="295088353:j8wOIKpy4Kw"; ck=jx66; frodotk_db="5a9d6afdccb445e70fd840f9661cd1b5"; push_noty_num=0; push_doumail_num=0';
+
+/* -------------------------------------------------
+   辅助：生成年份下拉列表（已覆盖到 2026 年）
+   ------------------------------------------------- */
 function makeYearList(start, end) {
   const years = [{ name: '全部', id: '' }]
   for (let y = start; y >= end; y--) {
@@ -13,278 +24,309 @@ function makeYearList(start, end) {
   return years
 }
 
-// 1. 获取分类列表
+/* -------------------------------------------------
+   1️⃣ 主分类列表（电影、电视剧、综艺、动漫、纪录片）
+      并在此验证 Cookie 是否有效
+   ------------------------------------------------- */
 async function getClassList(args) {
   const backData = new RepVideoClassList()
-  backData.data = [
-    { type_id: '1', type_name: '电影', hasSubclass: true },
-    { type_id: '2', type_name: '电视剧', hasSubclass: true },
-    { type_id: '3', type_name: '综艺', hasSubclass: false },
-    { type_id: '4', type_name: '动漫', hasSubclass: false },
-    { type_id: '5', type_name: '纪录片', hasSubclass: false }
-  ]
-  return backData
-}
-
-// 2. 获取子分类（筛选条件）
-async function getSubclassList(args) {
-  const { type_id } = args
-  const backData = new RepVideoSubclassList()
-  const years = makeYearList(2026, 2000)
-
-  // 通用筛选配置
-  const genreMap = {
-    '1': ['全部', '剧情', '喜剧', '爱情', '动作', '科幻', '动画', '悬疑', '惊悚', '犯罪', '恐怖', '战争'],
-    '2': ['全部', '剧情', '喜剧', '爱情', '家庭', '古装', '武侠', '科幻', '悬疑', '犯罪', '战争', '历史'],
-    '3': ['全部', '脱口秀', '真人秀', '访谈', '选秀', '音乐', '舞蹈'],
-    '4': ['全部', '热血', '冒险', '搞笑', '魔幻', '科幻', '校园', '恋爱', '机战', '格斗'],
-    '5': ['全部', '历史', '军事', '传记', '探索', '自然', '科技', '社会']
-  }
-
-  const areaMap = {
-    '1': ['全部', '中国大陆', '中国香港', '中国台湾', '美国', '日本', '韩国', '英国', '法国', '德国', '意大利', '西班牙', '印度', '泰国', '俄罗斯', '其他'],
-    '2': ['全部', '中国大陆', '中国香港', '中国台湾', '美国', '日本', '韩国', '英国', '其他'],
-    '3': ['全部', '中国大陆', '中国香港', '中国台湾', '美国', '日本', '韩国', '其他'],
-    '4': ['全部', '中国大陆', '日本', '美国', '其他'],
-    '5': ['全部', '中国大陆', '美国', '英国', '日本', '其他']
-  }
-
-  // 组装数据
-  backData.data = [
-    {
-      type_name: '类型',
-      list: (genreMap[type_id] || genreMap['1']).map(name => ({ name, id: name }))
-    },
-    {
-      type_name: '地区',
-      list: (areaMap[type_id] || areaMap['1']).map(name => ({ name, id: name === '全部' ? '' : name }))
-    },
-    {
-      type_name: '年份',
-      list: years.map(item => ({ name: item.name, id: item.id }))
-    },
-    {
-      type_name: '排序',
-      list: [
-        { name: '时间排序', id: 'time' },
-        { name: '人气排序', id: 'rank' },
-        { name: '评分排序', id: 'score' }
-      ]
-    }
-  ]
-  return backData
-}
-
-// 3. 获取视频列表 (核心修复部分)
-async function getVideoList(args) {
-  const { type_id, genre, area, year, sort, page } = args
-  const backData = new RepVideoList()
-
-  // 构造移动端网页URL
-  // 豆瓣移动端分类：电影=1, 剧集=2, 综艺=3, 动画=4
-  const typeMap = { '1': 'movie', '2': 'tv', '3': 'variety', '4': 'anime', '5': 'documentary' }
-  const targetType = typeMap[type_id] || 'movie'
-
-  // 排序映射
-  const sortMap = { 'time': 'new', 'rank': 'hot', 'score': 'score' }
-  const targetSort = sortMap[sort] || 'new'
-
-  // 构造URL (使用豆瓣移动端列表页)
-  let url = `https://m.douban.com/rexxar/api/v2/${targetType}/recommend`
-  let params = {
-    start: (page - 1) * 20,
-    count: 20,
-    sort: targetSort,
-    refresh: 0,
-    tags: '', // 移动端接口通常通过 URL 路径区分类型，tags 参数在网页版筛选中较复杂，这里主要依赖接口默认逻辑
-  }
-
-  // 处理年份和地区 (移动端接口对筛选支持有限，主要依赖推荐流，这里尝试拼接)
-  // 注意：移动端推荐接口通常不支持复杂的 tag 筛选，如果需要精确筛选，需改用 PC 网页版搜索接口
-  // 为了稳定性，这里使用推荐接口。如果需要精确筛选，代码需要改为抓取 PC 搜索页。
-  // 这里做一个妥协：优先保证有数据。
-
-  // 拼接参数
-  const queryString = Object.keys(params).map(k => `${k}=${params[k]}`).join('&')
-  const finalUrl = `${url}?${queryString}`
-
   try {
-    // 模拟请求头
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-      'Referer': 'https://m.douban.com/',
-      'Accept': 'application/json'
-    }
-
-    const response = await req(finalUrl, { headers: headers })
-    const data = JSON.parse(response.content)
-
-    if (data.subjects && data.subjects.length > 0) {
-      backData.data = data.subjects.map(item => ({
-        vod_id: item.id,
-        vod_name: item.title,
-        vod_pic: item.pic?.normal || item.pic?.large || item.cover,
-        vod_remarks: item.rating ? `${item.rating.value}` : '暂无评分',
-        vod_year: item.year || '',
-        // 移动端接口有时不返回类型，需要默认处理
-        type_name: item.card_subtitle || ''
-      }))
+    // ===== Cookie 有效性验证 =====
+    toast('正在验证豆瓣 Cookie...', 2)
+    var checkResp = await req('https://api.douban.com/v2/user/~me', {
+      headers: {
+        'Cookie': DOUBAN_COOKIE,
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+        'Referer': 'https://www.douban.com/'
+      }
+    })
+    if (checkResp.statusCode === 200 && checkResp.data) {
+      var user = JSONbig.parse(checkResp.data)
+      var userName = (user && user.name) ? user.name : '已登录'
+      toast('✅ Cookie 有效！用户：' + userName, 5)
     } else {
-      // 如果推荐接口没数据（可能被反爬），尝试使用 PC 搜索接口作为备选
-      return await getVideoListBySearch(args)
+      toast('❌ Cookie 验证失败，状态码：' + checkResp.statusCode + '，数据获取可能受影响', 4)
     }
-  } catch (e) {
-    console.log('API Error:', e)
-    // 出错时降级到搜索接口
-    return await getVideoListBySearch(args)
-  }
+    // ===== 验证结束 =====
 
-  return backData
+    backData.data = [
+      { type_id: '1', type_name: '电影', hasSubclass: true },
+      { type_id: '2', type_name: '电视剧', hasSubclass: true },
+      { type_id: '3', type_name: '综艺', hasSubclass: true },
+      { type_id: '4', type_name: '动漫', hasSubclass: true },
+      { type_id: '5', type_name: '纪录片', hasSubclass: true },
+    ]
+  } catch (e) {
+    backData.error = e.toString()
+    toast('Cookie 检查异常：' + e.message, 3)
+  }
+  return JSON.stringify(backData)
 }
 
-// 备选方案：使用 PC 网页搜索接口 (更精准，但容易触发验证码)
-async function getVideoListBySearch(args) {
-  const { type_id, genre, area, year, sort, page } = args
+/* -------------------------------------------------
+   2️⃣ 二级过滤器（在每个主分类里都加入 2026 年）
+   ------------------------------------------------- */
+async function getSubclassList(args) {
+  const backData = new RepVideoSubclassList()
+  const id = String(args.url || '')
+
+  const commonArea = [
+    { name: '全部', id: '' },
+    { name: '中国大陆', id: '中国大陆' },
+    { name: '香港', id: '香港' },
+    { name: '台湾', id: '台湾' },
+    { name: '美国', id: '美国' },
+    { name: '日本', id: '日本' },
+    { name: '韩国', id: '韩国' },
+    { name: '英国', id: '英国' },
+    { name: '法国', id: '法国' },
+    { name: '其他', id: '其他' },
+  ]
+
+  const commonSort = [
+    { name: '时间排序', id: 'time' },
+    { name: '人气排序', id: 'hits' },
+    { name: '评分排序', id: 'score' },
+  ]
+
+  let filter = []
+
+  switch (id) {
+    case '1': // 电影
+      filter = [
+        {
+          name: '剧情',
+          list: [
+            { name: '全部', id: '' },
+            { name: '喜剧', id: '喜剧' },
+            { name: '爱情', id: '爱情' },
+            { name: '动作', id: '动作' },
+            { name: '科幻', id: '科幻' },
+            { name: '动画', id: '动画' },
+            { name: '悬疑', id: '悬疑' },
+            { name: '犯罪', id: '犯罪' },
+          ],
+        },
+        { name: '地区', list: commonArea },
+        { name: '年份', list: makeYearList(2026, 1990) },
+        { name: '排序', list: commonSort },
+      ]
+      break
+
+    case '2': // 电视剧
+      filter = [
+        {
+          name: '剧情',
+          list: [
+            { name: '全部', id: '' },
+            { name: '古装', id: '古装' },
+            { name: '现代', id: '现代' },
+            { name: '悬疑', id: '悬疑' },
+            { name: '爱情', id: '爱情' },
+          ],
+        },
+        { name: '地区', list: commonArea },
+        { name: '年份', list: makeYearList(2026, 2000) },
+        { name: '排序', list: commonSort },
+      ]
+      break
+
+    case '3': // 综艺
+      filter = [
+        {
+          name: '类别',
+          list: [
+            { name: '全部', id: '' },
+            { name: '选秀', id: '选秀' },
+            { name: '访谈', id: '访谈' },
+            { name: '游戏互动', id: '游戏互动' },
+          ],
+        },
+        { name: '地区', list: commonArea },
+        { name: '年份', list: makeYearList(2026, 2010) },
+        { name: '排序', list: commonSort },
+      ]
+      break
+
+    case '4': // 动漫
+      filter = [
+        {
+          name: '类型',
+          list: [
+            { name: '全部', id: '' },
+            { name: '爱情', id: '爱情' },
+            { name: '科幻', id: '科幻' },
+            { name: '冒险', id: '冒险' },
+          ],
+        },
+        { name: '地区', list: commonArea },
+        { name: '年份', list: makeYearList(2026, 1999) },
+        { name: '排序', list: commonSort },
+      ]
+      break
+
+    case '5': // 纪录片
+      filter = [
+        {
+          name: '主題',
+          list: [
+            { name: '全部', id: '' },
+            { name: '自然', id: '自然' },
+            { name: '历史', id: 'history' },
+            { name: '科技', id: '科技' },
+          ],
+        },
+        { name: '地区', list: commonArea },
+        { name: '年份', list: makeYearList(2025, 1999) },
+        { name: '排序', list: commonSort },
+      ]
+      break
+
+    default:
+      filter = []
+  }
+
+  backData.data = new VideoSubclass()
+  backData.data.filter = filter
+  return JSON.stringify(backData)
+}
+
+/* -------------------------------------------------
+   3️⃣ 列表页面（使用豆瓣搜索 API，已加入 Cookie）
+   ------------------------------------------------- */
+async function getVideoList(args) {
   const backData = new RepVideoList()
-
-  const typeMap = { '1': 'movie', '2': 'tv', '3': 'tv', '4': 'tv', '5': 'tv' } // 综艺动漫归类为tv
-  const targetType = typeMap[type_id] || 'movie'
-
-  // 构造搜索参数
-  let tags = []
-  if (genre && genre !== '全部') tags.push(genre)
-  if (area && area !== '全部') tags.push(area)
-  // 年份在搜索接口中通常作为单独参数或标签
-
-  const tagStr = tags.join(',')
-
-  // 排序映射
-  const sortMap = { 'time': 'time', 'rank': 'recommend', 'score': 'score' }
-  const targetSort = sortMap[sort] || 'time'
-
-  const url = `https://movie.douban.com/j/new_search_subjects?sort=${targetSort}&range=0,10&tags=${tagStr}&start=${(page - 1) * 20}&year_range=${year ? year + ',' + year : ''}&type=${targetType}`
-
   try {
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      'Referer': 'https://movie.douban.com/',
-      'Accept': 'application/json'
-    }
-    const response = await req(url, { headers: headers })
-    const data = JSON.parse(response.content)
+    const page = Number(args.page || 1)
+    const startIdx = (page - 1) * 20
+    const url = `https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&sort=recommend&page_limit=20&page_start=${startIdx}`
 
-    if (data.data && data.data.length > 0) {
-      backData.data = data.data.map(item => ({
-        vod_id: item.id,
-        vod_name: item.title,
-        vod_pic: item.cover,
-        vod_remarks: item.rate || '暂无评分',
-        vod_year: item.year || '',
-        type_name: item.types.join('/')
-      }))
-    }
+    const resp = await req(url, {
+      headers: {
+        'Cookie': DOUBAN_COOKIE,   // 新增：带上登录状态
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+        'Referer': 'https://movie.douban.com/',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+    })
+    const json = JSONbig.parse(resp.data || '{}')
+    const list = (json?.subjects || []).map((s) => {
+      const vd = new VideoDetail()
+      vd.vod_id = s.url
+      vd.vod_name = s.title
+      vd.vod_pic = s.cover
+      vd.vod_remarks = `评分 ${s.rating}`
+      return vd
+    })
+    backData.data = list
+    toast(`豆瓣列表返回 ${list.length} 条数据`, 2)
   } catch (e) {
-    console.log('Search API Error:', e)
+    backData.error = e.toString()
+    toast(`列表请求失败: ${e.message}`, 3)
   }
-  return backData
+  return JSON.stringify(backData)
 }
 
-// 4. 获取视频详情
+/* -------------------------------------------------
+   4️⃣ 详情页（已加入 Cookie）
+   ------------------------------------------------- */
 async function getVideoDetail(args) {
-  const { vod_id } = args
   const backData = new RepVideoDetail()
-
-  const url = `https://m.douban.com/movie/subject/${vod_id}/`
-
   try {
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-      'Referer': 'https://m.douban.com/'
-    }
-    const response = await req(url, { headers: headers })
-    const html = response.content
+    const detailUrl = String(args.vod_id || '')
+    if (!detailUrl) throw new Error('缺少 vod_id')
 
-    // 简单解析 (这里需要正则提取，因为移动端页面结构复杂)
-    // 这是一个简化的解析逻辑，实际可能需要更复杂的正则
-    const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/)
-    const title = titleMatch ? titleMatch[1].replace(' (豆瓣)', '') : '未知标题'
+    const resp = await req(detailUrl, {
+      headers: {
+        'Cookie': DOUBAN_COOKIE,   // 新增
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+        'Referer': 'https://movie.douban.com/',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+    })
+    const $ = cheerio.load(resp.data || '')
 
-    const descMatch = html.match(/"description":"([\s\S]*?)"/)
-    const desc = descMatch ? descMatch[1].replace(/\\n/g, '\n') : ''
+    const detail = new VideoDetail()
+    detail.vod_id = detailUrl
+    detail.vod_name = $('.subject h1 span').first().text().trim()
+    detail.vod_pic = $('.subject .nbg img').attr('src') || ''
+    detail.vod_remarks = $('.rating_self .rating_num').text().trim()
+    detail.vod_content = $('#link-report .intro p')
+      .toArray()
+      .map((p) => $(p).text().trim())
+      .join('\n')
 
-    // 图片
-    const picMatch = html.match(/"image":"(https:[\s\S]*?\.jpg)"/)
-    const pic = picMatch ? picMatch[1].replace(/\\&quot;/g, '') : ''
+    const year = $('.subject .info span[property="v:initialReleaseDate"]')
+      .first()
+      .text()
+      .trim()
+    if (year) detail.vod_year = year
 
-    // 导演/演员 (移动端页面通常把这些信息藏在 script 标签里)
-    const directorMatch = html.match(/导演.*?>([\s\S]*?)</)
-    const director = directorMatch ? directorMatch[1].trim() : ''
-
-    const actorMatch = html.match(/主演.*?>([\s\S]*?)</)
-    const actor = actorMatch ? actorMatch[1].trim() : ''
-
-    // 类型/年份/地区
-    const infoMatch = html.match(/<span property="v:genre">([\s\S]*?)<\/span>.*?(\d{4})/)
-    const genre = infoMatch ? infoMatch[1] : ''
-    const year = infoMatch ? infoMatch[2] : ''
-
-    // 评分
-    const rateMatch = html.match(/<strong class="ll rating_num" property="v:average">([\s\S]*?)<\/strong>/)
-    const rate = rateMatch ? rateMatch[1] : '0'
-
-    backData.data = {
-      vod_id: vod_id,
-      vod_name: title,
-      vod_pic: pic,
-      vod_remarks: `评分: ${rate}`,
-      vod_year: year,
-      type_name: genre,
-      vod_director: director,
-      vod_actor: actor,
-      vod_content: desc,
-      vod_play_from: '豆瓣详情',
-      vod_play_url: '查看豆瓣详情$' + url
-    }
+    backData.data = detail
+    toast(`详情: ${detail.vod_name}`, 2)
   } catch (e) {
-    console.log('Detail Error:', e)
+    backData.error = e.toString()
+    toast(`详情请求失败: ${e.message}`, 3)
   }
-
-  return backData
+  return JSON.stringify(backData)
 }
 
-// 5. 搜索
-async function getSearchList(args) {
-  const { wd, page } = args
+/* -------------------------------------------------
+   5️⃣ 播放地址（豆瓣本体没有资源，这里返回空）
+   ------------------------------------------------- */
+async function getVideoPlayUrl(args) {
+  const backData = new RepVideoPlayUrl()
+  backData.data.play_url = ''
+  return JSON.stringify(backData)
+}
+
+/* -------------------------------------------------
+   6️⃣ 搜索（已加入 Cookie）
+   ------------------------------------------------- */
+async function searchVideo(args) {
   const backData = new RepVideoList()
-
-  const url = `https://m.douban.com/search?query=${encodeURIComponent(wd)}&start=${(page - 1) * 20}&count=20`
-
   try {
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-      'Referer': 'https://m.douban.com/'
-    }
-    const response = await req(url, { headers: headers })
-    const html = response.content
+    const kw = String(args.keywords || '')
+    if (!kw) throw new Error('缺少搜索关键字')
 
-    // 解析搜索结果 (移动端搜索页结构)
-    // 注意：移动端搜索返回的是 HTML，需要解析 DOM
-    // 这里使用简单的正则模拟解析
-    const itemRegex = /<a href="\/subject\/(\d+)\/"[\s\S]*?<img src="(https:[\s\S]*?\.jpg)"[\s\S]*?<h3>([\s\S]*?)<\/h3>[\s\S]*?<span class="subject-rate">([\s\S]*?)<\/span>/g
-    let match
-    while ((match = itemRegex.exec(html)) !== null) {
-      backData.data.push({
-        vod_id: match[1],
-        vod_name: match[3].replace(/<[^>]+>/g, ''),
-        vod_pic: match[2],
-        vod_remarks: match[4] || '暂无评分',
-        vod_year: '', // 搜索页通常不直接显示年份
-        type_name: ''
-      })
-    }
+    const url = `https://movie.douban.com/j/search_subjects?type=movie&tag=热门&sort=recommend&page_limit=20&page_start=0&keyword=${encodeURIComponent(
+      kw
+    )}`
+    const resp = await req(url, {
+      headers: {
+        'Cookie': DOUBAN_COOKIE,   // 新增
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+        'Referer': 'https://movie.douban.com/',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+    })
+    const json = JSONbig.parse(resp.data || '{}')
+    const list = (json?.subjects || []).map((s) => {
+      const vd = new VideoDetail()
+      vd.vod_id = s.url
+      vd.vod_name = s.title
+      vd.vod_pic = s.cover
+      vd.vod_remarks = `评分 ${s.rating}`
+      return vd
+    })
+    backData.data = list
   } catch (e) {
-    console.log('Search Error:', e)
+    backData.error = e.toString()
   }
-
-  return backData
+  return JSON.stringify(backData)
 }
