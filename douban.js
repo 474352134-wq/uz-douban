@@ -1,9 +1,9 @@
 // ignore
 
-//@name:豆瓣电影热映
+//@name:豆瓣电影热映-最终修复版
 //@webSite:https://movie.douban.com
-//@version:1.1
-//@remark:修复接口返回空数据问题，更换为公开榜单接口
+//@version:3.0
+//@remark:使用完全公开的JSONP接口，无需任何验证
 //@codeID:
 
 // ignore
@@ -11,8 +11,8 @@
 /**
  * 核心配置
  */
-// 使用豆瓣榜单公开接口，不需要 Cookie 也能访问
-var BASE_URL = 'https://m.douban.com/rexxar/api/v2/subject_collection/movie_real_time_hotest/items?start=';
+// 使用豆瓣电影分类接口，完全公开无需验证
+var BASE_URL = 'https://movie.douban.com/j/new_search_subjects?sort=U&range=0,10&tags=&start=';
 
 /**
  * 入口函数
@@ -25,48 +25,50 @@ function getVideoList(args) {
     var url = BASE_URL + start + '&count=' + count;
 
     try {
-        // 构造请求头，伪装成手机浏览器，防止被拦截
+        // 构造请求头，伪装成普通浏览器
         var headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-            "Referer": "https://m.douban.com/"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Referer": "https://movie.douban.com/",
+            "Accept": "application/json"
         };
 
-        // 发起请求
+        // 发起同步请求
         var response = http.get(url, headers);
-        var json = JSON.parse(response);
-
-        // 检查数据是否存在
-        if (json.subject_collection_items && json.subject_collection_items.length > 0) {
-            var list = [];
-            for (var i = 0; i < json.subject_collection_items.length; i++) {
-                var item = json.subject_collection_items[i];
-                // 组装数据
-                list.push({
-                    title: item.title,
-                    // 这里的 url 是详情页，UZ 会自动去解析
-                    url: item.url,
-                    // 封面图
-                    img: item.pic?.link || item.cover?.url,
-                    // 评分
-                    score: item.rating ? item.rating.value : "暂无评分",
-                    // 简介
-                    desc: item.info
-                });
+        
+        if (response && response.statusCode == 200) {
+            var json = JSON.parse(response.body);
+            
+            // 检查是否有数据
+            if (json.data && json.data.length > 0) {
+                var videos = [];
+                
+                for (var i = 0; i < json.data.length; i++) {
+                    var item = json.data[i];
+                    
+                    // 构建视频对象
+                    var video = {
+                        title: item.title,
+                        url: item.url, // 详情页链接
+                        cover: item.cover, // 封面图
+                        desc: "评分: " + item.rate + " / " + item.year, // 评分和年份
+                        type: 1 // 类型1表示跳转到网页
+                    };
+                    
+                    videos.push(video);
+                }
+                
+                return videos;
+            } else {
+                // 没有更多数据
+                return [];
             }
-            return {
-                code: 0, // 0 表示成功
-                data: list,
-                page: page,
-                total: json.total // 总数
-            };
         } else {
-            // 如果还是空，打印日志（虽然 UZ 可能看不到，但有助于排查）
-            console.log("接口返回空数据，可能是网络问题或接口变动");
-            return { code: 1, msg: "暂无数据" };
+            // 请求失败
+            console.error("请求失败: " + (response ? response.statusCode : "无响应"));
+            return [];
         }
     } catch (e) {
-        // 捕获错误，防止崩溃
-        console.log("请求失败: " + e);
-        return { code: 1, msg: "请求失败: " + e };
+        console.error("解析失败: " + e.message);
+        return [];
     }
 }
