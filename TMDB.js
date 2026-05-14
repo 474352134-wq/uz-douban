@@ -1,5 +1,5 @@
 //@name:{LHM}TMDB视频源
-//@version:2
+//@version:3
 //@webSite:https://www.themoviedb.org/
 //@remark:使用TMDB API获取电影、电视剧、综艺、动漫、纪录片，年份筛选已覆盖至2026年
 //@order:A01
@@ -22,18 +22,13 @@ function makeYearList(start, end) {
 
 async function getClassList(args) {
   var backData = new RepVideoClassList();
-  try {
-    backData.data = [
-      { type_id: 'movie', type_name: '电影', hasSubclass: true },
-      { type_id: 'tv', type_name: '电视剧', hasSubclass: true },
-      { type_id: 'variety', type_name: '综艺', hasSubclass: true },
-      { type_id: 'anime', type_name: '动漫', hasSubclass: true },
-      { type_id: 'documentary', type_name: '纪录片', hasSubclass: true },
-    ];
-    toast('TMDB视频源加载成功', 2);
-  } catch (e) {
-    backData.error = e.toString();
-  }
+  backData.data = [
+    { type_id: 'movie', type_name: '电影', hasSubclass: true },
+    { type_id: 'tv', type_name: '电视剧', hasSubclass: true },
+    { type_id: 'variety', type_name: '综艺', hasSubclass: true },
+    { type_id: 'anime', type_name: '动漫', hasSubclass: true },
+    { type_id: 'documentary', type_name: '纪录片', hasSubclass: true }
+  ];
   return JSON.stringify(backData);
 }
 
@@ -45,11 +40,11 @@ async function getSubclassList(args) {
     { name: '评分降序', id: 'vote_average.desc' },
     { name: '评分升序', id: 'vote_average.asc' },
     { name: '上映日期降序', id: 'primary_release_date.desc' },
-    { name: '上映日期升序', id: 'primary_release_date.asc' },
+    { name: '上映日期升序', id: 'primary_release_date.asc' }
   ];
   var filter = [
     { name: '年份', list: makeYearList(2026, 1990) },
-    { name: '排序', list: commonSort },
+    { name: '排序', list: commonSort }
   ];
   backData.data = new VideoSubclass();
   backData.data.filter = filter;
@@ -59,45 +54,29 @@ async function getSubclassList(args) {
 async function getVideoList(args) {
   var backData = new RepVideoList();
   try {
-    var type = String(args.url || 'movie');
-    var page = Number(args.page || 1);
+    var type = args.url || args.id || args.type || 'movie';
+    type = String(type);
+    var page = Number(args.page || args.p || 1);
     var year = args.year || '';
     var sort = args.sort || 'popularity.desc';
 
     var apiUrl = '';
     var isTV = false;
 
-    switch (type) {
-      case 'movie':
-        apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&sort_by=' + encodeURIComponent(sort) +
-                 '&page=' + page + '&include_adult=false';
-        break;
-      case 'tv':
-        isTV = true;
-        apiUrl = TMDB_API_BASE + '/discover/tv?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&sort_by=' + encodeURIComponent(sort) +
-                 '&page=' + page + '&include_adult=false';
-        break;
-      case 'variety':
-        isTV = true;
-        apiUrl = TMDB_API_BASE + '/discover/tv?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&sort_by=' + encodeURIComponent(sort) +
-                 '&page=' + page + '&with_genres=10764';
-        break;
-      case 'anime':
-        apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&sort_by=' + encodeURIComponent(sort) +
-                 '&page=' + page + '&with_genres=16';
-        break;
-      case 'documentary':
-        apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&sort_by=' + encodeURIComponent(sort) +
-                 '&page=' + page + '&with_genres=99';
-        break;
-      default:
-        apiUrl = TMDB_API_BASE + '/movie/popular?api_key=' + TMDB_API_KEY +
-                 '&language=zh-CN&page=' + page;
+    if (type === 'movie') {
+      apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY + '&language=zh-CN&sort_by=' + encodeURIComponent(sort) + '&page=' + page + '&include_adult=false';
+    } else if (type === 'tv') {
+      isTV = true;
+      apiUrl = TMDB_API_BASE + '/discover/tv?api_key=' + TMDB_API_KEY + '&language=zh-CN&sort_by=' + encodeURIComponent(sort) + '&page=' + page + '&include_adult=false';
+    } else if (type === 'variety') {
+      isTV = true;
+      apiUrl = TMDB_API_BASE + '/discover/tv?api_key=' + TMDB_API_KEY + '&language=zh-CN&sort_by=' + encodeURIComponent(sort) + '&page=' + page + '&with_genres=10764';
+    } else if (type === 'anime') {
+      apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY + '&language=zh-CN&sort_by=' + encodeURIComponent(sort) + '&page=' + page + '&with_genres=16';
+    } else if (type === 'documentary') {
+      apiUrl = TMDB_API_BASE + '/discover/movie?api_key=' + TMDB_API_KEY + '&language=zh-CN&sort_by=' + encodeURIComponent(sort) + '&page=' + page + '&with_genres=99';
+    } else {
+      apiUrl = TMDB_API_BASE + '/movie/popular?api_key=' + TMDB_API_KEY + '&language=zh-CN&page=' + page;
     }
 
     if (year) {
@@ -107,8 +86,6 @@ async function getVideoList(args) {
         apiUrl += '&primary_release_year=' + year;
       }
     }
-
-    toast('请求URL: ' + apiUrl, 2);
 
     var resp = await req(apiUrl, {
       headers: {
@@ -132,10 +109,12 @@ async function getVideoList(args) {
     }
 
     backData.data = list;
-    toast('TMDB 返回 ' + list.length + ' 条数据', 2);
+    if (list.length === 0) {
+      toast('未获取到数据，请检查网络或分类筛选条件', 2);
+    }
   } catch (e) {
-    toast('列表请求失败: ' + e.toString(), 3);
     backData.error = e.toString();
+    toast('列表请求失败: ' + e.toString(), 3);
   }
   return JSON.stringify(backData);
 }
@@ -179,7 +158,6 @@ async function getVideoDetail(args) {
     }
 
     backData.data = detail;
-    toast('详情: ' + detail.vod_name, 2);
   } catch (e) {
     backData.error = e.toString();
     toast('详情请求失败: ' + e.message, 3);
@@ -196,11 +174,10 @@ async function getVideoPlayUrl(args) {
 async function searchVideo(args) {
   var backData = new RepVideoList();
   try {
-    var kw = String(args.keywords || '');
+    var kw = String(args.keywords || args.wd || '');
     if (!kw) throw new Error('缺少搜索关键字');
 
-    var url = TMDB_API_BASE + '/search/multi?api_key=' + TMDB_API_KEY +
-              '&language=zh-CN&query=' + encodeURIComponent(kw) + '&page=1';
+    var url = TMDB_API_BASE + '/search/multi?api_key=' + TMDB_API_KEY + '&language=zh-CN&query=' + encodeURIComponent(kw) + '&page=1';
     var resp = await req(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -223,7 +200,9 @@ async function searchVideo(args) {
       }
     }
     backData.data = list;
-    toast('搜索到 ' + list.length + ' 条结果', 2);
+    if (list.length === 0) {
+      toast('未搜索到相关结果', 2);
+    }
   } catch (e) {
     backData.error = e.toString();
     toast('搜索失败: ' + e.message, 3);
