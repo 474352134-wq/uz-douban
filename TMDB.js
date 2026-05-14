@@ -1,178 +1,144 @@
-//@name:{LHM}TMDB安全版
-//@version:7
+//@name:TMDB
+//@version:8
 //@webSite:https://www.themoviedb.org/
-//@remark:最终安全尝试
 //@order:A01
-//@codeID:
-//@env:
 //@isAV:0
 //@deprecated:0
 
 // ignore
-import {
-    VideoDetail,
-    RepVideoClassList,
-    RepVideoSubclassList,
-    RepVideoList,
-    RepVideoDetail,
-    RepVideoPlayUrl,
-    VideoSubclass,
-} from '../core/uzVideo.js'
-
-import {
-    req,
-    toast,
-} from '../core/uzUtils.js'
+import { VideoDetail, VideoSubclass, RepVideoClassList, RepVideoSubclassList, RepVideoList, RepVideoDetail, RepVideoPlayUrl } from '../core/uzVideo.js'
+import { req, JSONbig } from '../core/uzUtils.js'
 // ignore
 
-var TMDB_API_KEY = '0c9ff73a2d99c4ece5f0134e2586c375';
-var TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
-var TMDB_API_BASE = 'https://api.tmdb.org/3';
+var K = '0c9ff73a2d99c4ece5f0134e2586c375'
+var B = 'https://api.tmdb.org/3'
+var I = 'https://image.tmdb.org/t/p/w500'
 
-function s(obj) {
-    try {
-        if (typeof obj === 'string') return obj;
-        if (obj === null || obj === undefined) return '';
-        return JSON.stringify(obj);
-    } catch (e) {
-        return String(obj);
-    }
-}
-
-function makeYearList(start, end) {
-    var years = [{ name: '全部', id: '' }];
-    for (var y = start; y >= end; y--) {
-        years.push({ name: String(y), id: String(y) });
-    }
-    return years;
+function makeYearList(s, e) {
+    var a = [{ name: '全部', id: '' }]
+    for (var y = s; y >= e; y--) a.push({ name: String(y), id: String(y) })
+    return a
 }
 
 async function getClassList(args) {
-    var backData = new RepVideoClassList();
-    try {
-        backData.data = [
-            { type_id: 'movie', type_name: '电影', hasSubclass: true }
-        ];
-    } catch (e) {
-        backData.error = s(e);
-    }
-    return JSON.stringify(backData);
+    var d = new RepVideoClassList()
+    d.data = [
+        { type_id: 'movie', type_name: '电影', hasSubclass: true },
+        { type_id: 'tv', type_name: '电视剧', hasSubclass: true }
+    ]
+    return JSON.stringify(d)
 }
 
 async function getSubclassList(args) {
-    var backData = new RepVideoSubclassList();
-    try {
-        var sorts = [
-            { name: '人气降序', id: 'popularity.desc' },
-            { name: '评分降序', id: 'vote_average.desc' }
-        ];
-        backData.data = new VideoSubclass();
-        backData.data.filter = [
-            { name: '年份', list: makeYearList(2026, 2020) },
-            { name: '排序', list: sorts }
-        ];
-    } catch (e) {
-        backData.error = s(e);
-    }
-    return JSON.stringify(backData);
+    var d = new RepVideoSubclassList()
+    var s = [
+        { name: '人气降序', id: 'popularity.desc' },
+        { name: '评分降序', id: 'vote_average.desc' },
+        { name: '上映日期降序', id: 'primary_release_date.desc' }
+    ]
+    d.data = new VideoSubclass()
+    d.data.filter = [
+        { name: '年份', list: makeYearList(2026, 1990) },
+        { name: '排序', list: s }
+    ]
+    return JSON.stringify(d)
 }
 
 async function getVideoList(args) {
-    var backData = new RepVideoList();
-    try {
-        var page = Number(args.page || 1);
-        var url = TMDB_API_BASE + '/movie/popular?api_key=' + TMDB_API_KEY + '&language=zh-CN&page=' + page;
-        var resp = await req(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            }
-        });
-        var json = JSON.parse(resp.data || '{}');
-        var results = json.results || [];
-        var list = [];
-        for (var i = 0; i < results.length; i++) {
-            var item = results[i];
-            var vd = new VideoDetail();
-            vd.vod_id = 'movie_' + item.id;
-            vd.vod_name = item.title || '';
-            vd.vod_pic = item.poster_path ? (TMDB_IMAGE_BASE + item.poster_path) : '';
-            vd.vod_remarks = '评分 ' + (item.vote_average || '?');
-            list.push(vd);
-        }
-        backData.data = list;
-    } catch (e) {
-        backData.error = s(e);
-    }
-    return JSON.stringify(backData);
+    return await getSubclassVideoList(args)
 }
 
 async function getSubclassVideoList(args) {
-    return await getVideoList(args);
+    var d = new RepVideoList()
+    try {
+        var t = String(args.url || 'movie')
+        var p = Number(args.page || 1)
+        var y = args.year || ''
+        var s = args.sort || 'popularity.desc'
+        var u = ''
+        var isTv = false
+        if (t === 'movie') {
+            u = B + '/discover/movie?api_key=' + K + '&language=zh-CN&sort_by=' + encodeURIComponent(s) + '&page=' + p
+        } else {
+            isTv = true
+            u = B + '/discover/tv?api_key=' + K + '&language=zh-CN&sort_by=' + encodeURIComponent(s) + '&page=' + p
+        }
+        if (y) u += isTv ? '&first_air_date_year=' + y : '&primary_release_year=' + y
+        var r = await req(u, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } })
+        var j = JSONbig.parse(r.data || '{}')
+        var list = []
+        var items = j.results || []
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i]
+            var v = new VideoDetail()
+            v.vod_id = (isTv ? 'tv_' : 'movie_') + it.id
+            v.vod_name = it.title || it.name || ''
+            v.vod_pic = it.poster_path ? I + it.poster_path : ''
+            v.vod_remarks = '评分 ' + (it.vote_average ? it.vote_average.toFixed(1) : '?')
+            list.push(v)
+        }
+        d.data = list
+    } catch (e) {
+        d.error = String(e)
+    }
+    return JSON.stringify(d)
 }
 
 async function getVideoDetail(args) {
-    var backData = new RepVideoDetail();
+    var d = new RepVideoDetail()
     try {
-        var vodId = String(args.vod_id || '');
-        if (!vodId) throw new Error('no id');
-        var parts = vodId.split('_');
-        var id = parts[1];
-        var url = TMDB_API_BASE + '/movie/' + id + '?api_key=' + TMDB_API_KEY + '&language=zh-CN';
-        var resp = await req(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            }
-        });
-        var info = JSON.parse(resp.data || '{}');
-        var d = new VideoDetail();
-        d.vod_id = vodId;
-        d.vod_name = info.title || '';
-        d.vod_pic = info.poster_path ? (TMDB_IMAGE_BASE + info.poster_path) : '';
-        d.vod_remarks = '评分 ' + (info.vote_average || '?');
-        d.vod_content = info.overview || '';
-        if (info.release_date) d.vod_year = info.release_date.substring(0, 4);
-        backData.data = d;
+        var id = String(args.vod_id || '')
+        if (!id) throw new Error('no id')
+        var parts = id.split('_')
+        var type = parts[0], tid = parts[1]
+        var u = B + '/' + (type === 'tv' ? 'tv' : 'movie') + '/' + tid + '?api_key=' + K + '&language=zh-CN'
+        var r = await req(u, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } })
+        var info = JSONbig.parse(r.data || '{}')
+        var v = new VideoDetail()
+        v.vod_id = id
+        v.vod_name = info.title || info.name || ''
+        v.vod_pic = info.poster_path ? I + info.poster_path : ''
+        v.vod_remarks = '评分 ' + (info.vote_average ? info.vote_average.toFixed(1) : '?')
+        v.vod_content = info.overview || ''
+        if (info.release_date) v.vod_year = info.release_date.substring(0, 4)
+        else if (info.first_air_date) v.vod_year = info.first_air_date.substring(0, 4)
+        d.data = v
     } catch (e) {
-        backData.error = s(e);
+        d.error = String(e)
     }
-    return JSON.stringify(backData);
+    return JSON.stringify(d)
 }
 
 async function getVideoPlayUrl(args) {
-    var backData = new RepVideoPlayUrl();
-    backData.data.play_url = '';
-    return JSON.stringify(backData);
+    var d = new RepVideoPlayUrl()
+    d.data.play_url = ''
+    return JSON.stringify(d)
 }
 
 async function searchVideo(args) {
-    var backData = new RepVideoList();
+    var d = new RepVideoList()
     try {
-        var kw = String(args.keywords || '');
-        if (!kw) throw new Error('no keyword');
-        var url = TMDB_API_BASE + '/search/movie?api_key=' + TMDB_API_KEY + '&language=zh-CN&query=' + encodeURIComponent(kw) + '&page=1';
-        var resp = await req(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
+        var kw = String(args.keywords || '')
+        if (!kw) throw new Error('no keyword')
+        var u = B + '/search/multi?api_key=' + K + '&language=zh-CN&query=' + encodeURIComponent(kw) + '&page=1'
+        var r = await req(u, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } })
+        var j = JSONbig.parse(r.data || '{}')
+        var list = []
+        var items = j.results || []
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i]
+            if (it.media_type === 'movie' || it.media_type === 'tv') {
+                var v = new VideoDetail()
+                v.vod_id = it.media_type + '_' + it.id
+                v.vod_name = it.title || it.name || ''
+                v.vod_pic = it.poster_path ? I + it.poster_path : ''
+                v.vod_remarks = '评分 ' + (it.vote_average ? it.vote_average.toFixed(1) : '?')
+                list.push(v)
             }
-        });
-        var json = JSON.parse(resp.data || '{}');
-        var results = json.results || [];
-        var list = [];
-        for (var i = 0; i < results.length; i++) {
-            var item = results[i];
-            var vd = new VideoDetail();
-            vd.vod_id = 'movie_' + item.id;
-            vd.vod_name = item.title || '';
-            vd.vod_pic = item.poster_path ? (TMDB_IMAGE_BASE + item.poster_path) : '';
-            vd.vod_remarks = '评分 ' + (item.vote_average || '?');
-            list.push(vd);
         }
-        backData.data = list;
+        d.data = list
     } catch (e) {
-        backData.error = s(e);
+        d.error = String(e)
     }
-    return JSON.stringify(backData);
+    return JSON.stringify(d)
 }
