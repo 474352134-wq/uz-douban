@@ -2,7 +2,7 @@
 
 //@name:豆瓣电影最终修复版(含闭合)
 //@webSite:https://movie.douban.com
-//@version:5
+//@version:6
 //@remark:补全了结尾，修复语法错误
 //@isAV:0
 //@deprecated:0
