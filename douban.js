@@ -1,5 +1,5 @@
 //@name:[腾讯] 腾讯视频源
-//@version:21
+//@version:22
 //@webSite:https://v.qq.com
 //@remark:适用于UZ影视的腾讯视频源（改自PPnix）
 //@order:A05
@@ -7,6 +7,12 @@
 //@env:
 //@isAV:0
 //@deprecated:0
+
+const cheerio = require('cheerio');
+const runner = require('spider_runner');
+runner.run(module.exports);
+
+module.exports = { getClassList, getVideoList, getVideoDetail, getVideoPlayUrl, searchVideo, getSubclassList, getSubclassVideoList };
 
 const appConfig = {
     _webSite: 'https://v.qq.com',
@@ -42,7 +48,7 @@ async function getVideoList(args) {
     try {
         const pageIdx = args.page > 1 ? args.page - 1 : ''
         const url = `${appConfig.webSite}/cn/${args.url}/---${pageIdx}-newstime.html`
-        const resp = await req(url, { headers: appConfig.headers() })
+        const resp = await OmniBox.request(url, { method: 'GET', headers: appConfig.headers() })
         const $ = cheerio.load(resp.data)
         $('.lists-content ul li').each((_, li) => {
             const video = new VideoDetail()
@@ -64,7 +70,7 @@ async function getVideoDetail(args) {
     var backData = new RepVideoDetail()
     try {
         const url = appConfig.webSite + args.url
-        const resp = await req(url, { headers: appConfig.headers() })
+        const resp = await OmniBox.request(url, { method: 'GET', headers: appConfig.headers() })
         const $ = cheerio.load(resp.data)
         const video = new VideoDetail()
         video.vod_id = args.url
@@ -120,7 +126,7 @@ async function searchVideo(args) {
         const kw = encodeURIComponent(args.searchWord)
         const pagePart = args.page>1 ? `-page-${args.page}` : ''
         const url = `${appConfig.webSite}/cn/search/${kw}--.html${pagePart}`
-        const resp = await req(url, { headers: appConfig.headers() })
+        const resp = await OmniBox.request(url, { method: 'GET', headers: appConfig.headers() })
         const $ = cheerio.load(resp.data)
         $('.lists-content ul li').each((_, el) => {
             const video = new VideoDetail()
