@@ -1,77 +1,226 @@
 // ignore
 
-//@name:豆瓣
-// 网站主页，只有视频源扩展需要
+//@name:豆瓣电影列表源
 //@webSite:https://movie.douban.com
-// 版本号纯数字
-//@version:1
-// 备注，没有的话就不填
-//@remark:用于提取豆瓣电影名并触发搜索
-// 加密 id，没有的话就不填
-//@codeID:
-// 使用的环境变量，没有的话就不填
-//@env:
-// 是否是AV 1是  0否
+//@version:2
+//@remark:提供豆瓣热映、Top250列表，并支持跳转搜索播放
 //@isAV:0
-//是否弃用 1是  0否
 //@deprecated:0
 
 // ignore
 
-// ... (中间的 import 部分保持不变) ...
+import {
+    FilterLabel,
+    FilterTitle,
+    VideoClass,
+    VideoSubclass,
+    VideoDetail,
+    RepVideoClassList,
+    RepVideoSubclassList,
+    RepVideoList,
+    RepVideoDetail,
+    RepVideoPlayUrl,
+    UZArgs,
+    UZSubclassVideoListArgs,
+} from '../core/uzVideo.js'
 
-/**
- * 获取视频详情
- * @param {UZArgs} args
- * @returns {@Promise<JSON.stringify(new RepVideoDetail())>}
- */
+import {
+    UZUtils,
+    ProData,
+    ReqResponseType,
+    ReqAddressType,
+    req,
+    getEnv,
+    setEnv,
+    goToVerify,
+    openWebToBindEnv,
+    toast,
+    kIsDesktop,
+    kIsAndroid,
+    kIsIOS,
+    kIsWindows,
+    kIsMacOS,
+    kIsTV,
+    kLocale,
+    kAppVersion,
+    formatBackData,
+} from '../core/uzUtils.js'
+
+import { cheerio, Crypto, Encrypt, JSONbig } from '../core/uz3lib.js'
+
+// ignore
+
+const appConfig = {
+    _webSite: 'https://movie.douban.com',
+    get webSite() { return this._webSite },
+    set webSite(value) { this._webSite = value },
+    _uzTag: '',
+    get uzTag() { return this._uzTag },
+    set uzTag(value) { this._uzTag = value },
+}
+
+// ==================== 1. 获取分类列表 (首页显示的菜单) ====================
+async function getClassList(args) {
+    var backData = new RepVideoClassList()
+    try {
+        // 手动定义三个核心分类
+        let class1 = new VideoClass()
+        class1.type_name = "🔥 豆瓣热映"
+        class1.type_id = "nowplaying" // 标识符
+
+        let class2 = new VideoClass()
+        class2.type_name = "⏳ 即将上映"
+        class2.type_id = "soon"
+
+        let class3 = new VideoClass()
+        class3.type_name = "🏆 豆瓣Top250"
+        class3.type_id = "top250"
+
+        backData.class = [class1, class2, class3]
+    } catch (error) {
+        backData.error = error.toString()
+    }
+    return JSON.stringify(backData)
+}
+
+// ==================== 2. 获取视频列表 (点击分类后显示的列表) ====================
+async function getVideoList(args) {
+    var backData = new RepVideoList()
+    try {
+        let page = args.page || 1
+        let typeId = args.classId // 获取点击的分类ID (nowplaying, soon, top250)
+        let url = ''
+
+        // 根据不同分类拼接豆瓣URL
+        if (typeId === 'nowplaying') {
+            url = `${appConfig.webSite}/cinema/nowplaying/` // 热映
+        } else if (typeId === 'soon') {
+            url = `${appConfig.webSite}/cinema/soon/` // 即将上映
+        } else if (typeId === 'top250') {
+            let start = (page - 1) * 25
+            url = `${appConfig.webSite}/top250?start=${start}` // Top250分页
+        }
+
+        // 发起请求
+        const response = await req({
+            url: url,
+            method: 'GET',
+            responseType: ReqResponseType.TEXT,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Referer': appConfig.webSite
+            }
+        })
+
+        if (response.code !== 200) {
+            throw new Error(`网络错误: ${response.code}`)
+        }
+
+        const $ = cheerio.load(response.body)
+        let videoList = []
+
+        // --- 解析热映和即将上映 (结构相同) ---
+        if (typeId === 'nowplaying' || typeId === 'soon') {
+            // 豆瓣热映列表通常在 #nowplaying 或 .lists 下
+            $('.lists .item').each((i, elem) => {
+                try {
+                    let title = $(elem).attr('data-title') || $(elem).find('img').attr('alt')
+                    let url = $(elem).find('a').attr('href')
+                    let cover = $(elem).find('img').attr('src')
+
+                    // 清洗封面链接 (去除 ?xxx 参数，防止加载失败)
+                    if (cover && cover.includes('?')) {
+                        cover = cover.split('?')[0]
+                    }
+
+                    if (title && url) {
+                        let video = new VideoDetail() // 这里暂时用 VideoDetail 结构凑数据，UZ 会自动转换，或者你可以 new 一个简易对象
+                        // 实际上 UZ 的 RepVideoList 需要的是包含特定字段的对象
+                        // 我们直接 push 一个符合规范的纯对象更稳妥
+                        videoList.push({
+                            vod_name: title,
+                            vod_pic: cover,
+                            vod_remarks: $(elem).find('.subject-cast').text(), // 演员表作为备注
+                            vod_id: url, // 详情页链接作为ID
+                            vod_play_url: '搜索播放$SEARCH' // 关键：标记为搜索播放
+                        })
+                    }
+                } catch (e) { console.log(e) }
+            })
+        }
+
+        // --- 解析 Top250 ---
+        else if (typeId === 'top250') {
+            $('#content .grid_view .item').each((i, elem) => {
+                try {
+                    let title = $(elem).find('.info .title').text()
+                    let url = $(elem).find('.pic a').attr('href')
+                    let cover = $(elem).find('.pic img').attr('src')
+                    let rating = $(elem).find('.rating_num').text()
+
+                    if (cover && cover.includes('?')) {
+                        cover = cover.split('?')[0]
+                    }
+
+                    if (title && url) {
+                        videoList.push({
+                            vod_name: title,
+                            vod_pic: cover,
+                            vod_remarks: '评分: ' + rating,
+                            vod_id: url,
+                            vod_play_url: '搜索播放$SEARCH'
+                        })
+                    }
+                } catch (e) { console.log(e) }
+            })
+        }
+
+        backData.list = videoList
+        backData.page = page
+        backData.pagecount = typeId === 'top250' ? 10 : 1 // 简单分页处理，Top250大约10页，其他暂不分页
+
+    } catch (error) {
+        backData.error = error.toString()
+        toast("抓取失败: " + error.toString())
+    }
+    return JSON.stringify(backData)
+}
+
+// ==================== 3. 获取详情 (核心：点击后触发搜索) ====================
 async function getVideoDetail(args) {
     var backData = new RepVideoDetail()
     try {
-        // 1. 获取网页内容
-        // args.url 是 UZ 传进来的当前豆瓣页面的 URL
+        // args.vodId 就是我们在 getVideoList 里传的详情页链接 (例如 https://movie.douban.com/subject/1292052/)
+        const detailUrl = args.vodId
+
+        // 1. 请求豆瓣详情页，获取精准的电影名称
         const response = await req({
-            url: args.url,
+            url: detailUrl,
             method: 'GET',
-            responseType: ReqResponseType.TEXT, // 注意：这里必须是 TEXT，因为我们要解析 HTML 字符串
-        });
+            responseType: ReqResponseType.TEXT,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        })
 
-        // 2. 使用 cheerio 解析 HTML
-        const $ = cheerio.load(response.data);
-
-        // 3. 提取电影标题
-        // 根据之前的分析，豆瓣电影标题通常在 span[property="v:itemreviewed"] 里
-        let movieName = $('span[property="v:itemreviewed"]').text().trim();
-        
-        // 防空处理：如果没取到名字，尝试用网页标题或者返回错误
-        if (!movieName) {
-            movieName = $('title').text().trim();
-            // 如果还是空，直接返回错误
-            if (!movieName) {
-                backData.error = "无法提取电影名称";
-                return JSON.stringify(backData);
-            }
+        let movieName = ""
+        if (response.code === 200) {
+            const $ = cheerio.load(response.body)
+            // 获取 span[property="v:itemreviewed"] 的文本
+            movieName = $('span[property="v:itemreviewed"]').text().trim()
         }
 
-        // 4. 构造返回数据
-        // 我们不需要真正的视频线路，只需要告诉 UZ 这是一个搜索指令
-        // UZ 的规则是：如果播放地址是 "search:关键词"，它就会自动触发搜索
-        
-        // 创建一个线路对象
-        const line = {
-            name: "豆瓣搜索",
-            // 关键点：url 必须是 search: 开头，后面跟上电影名
-            url: `search:${movieName}`,
-            // 其他字段可以留空或填默认值
-            eps: [],
-            isVip: false,
-        };
+        // 如果没抓取到名字，尝试从URL或者参数里凑一个（防止失败）
+        if (!movieName) {
+            movieName = detailUrl // 兜底
+        }
 
-        // 将线路添加到 backData.lines 数组中
-        backData.lines.push(line);
-
-        // 设置视频标题（可选，用于显示）
-        backData.title = movieName;
+        // 2. 构造返回数据
+        // 这里我们不返回具体的集数，而是返回一个特殊的标记，告诉 UZ 去搜索
+        backData.vod_name = movieName
+        backData.vod_pic = "" // 可选：再次请求获取海报
+        backData.vod_content = "点击播放按钮，UZ将自动搜索全网资源进行播放。"
+        backData.vod_play_from = "全网搜索源"
+        // 格式：集数名称$搜索关键词
+        backData.vod_play_url = `点击搜索《${movieName}》$${encodeURIComponent(movieName)}`
 
     } catch (error) {
         backData.error = error.toString()
@@ -79,22 +228,28 @@ async function getVideoDetail(args) {
     return JSON.stringify(backData)
 }
 
-/**
- * 获取视频的播放地址
- * @param {UZArgs} args
- * @returns {@Promise<JSON.stringify(new RepVideoPlayUrl())>}
- */
+// ==================== 4. 播放地址 (这里其实不会走到这里，因为上面返回的是搜索标记) ====================
+// 但为了完整性，如果上面返回的是真实链接，这里需要解析。
+// 针对本需求，主要是为了处理上面的 $SEARCH 逻辑（如果UZ内部机制需要）
 async function getVideoPlayUrl(args) {
     var backData = new RepVideoPlayUrl()
     try {
-        // 对于这种跳转源，这个函数通常用不到
-        // 因为我们在 getVideoDetail 里返回的是 search:xxx，UZ 会直接去搜索，不会调用这个函数来获取播放地址
-        // 所以这里保持默认空实现即可
+        // 如果 getVideoDetail 返回的是豆瓣链接，这里其实不需要做太多
+        // UZ 的核心逻辑通常是在 getVideoDetail 返回特殊的播放字符串时自动处理
+        // 或者你可以在这里写：return JSON.stringify({url: args.playUrl})
+        backData.url = args.playUrl
     } catch (error) {
         backData.error = error.toString()
     }
     return JSON.stringify(backData)
 }
 
-// 其他不需要的函数（如 getClassList, getVideoList 等）保持默认空实现即可
-// 因为我们只关心“详情页”的跳转逻辑
+// ==================== 5. 搜索 (如果用户在UZ首页直接搜索，也会走这里) ====================
+async function searchVideo(args) {
+    // 可以直接调用 getVideoList 的逻辑，或者留空让用户去详情页触发
+    // 这里简单实现：直接返回空，主要依赖详情页跳转
+    var backData = new RepVideoList()
+    return JSON.stringify(backData)
+}
+
+// ignore
