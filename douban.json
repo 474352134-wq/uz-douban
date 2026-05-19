@@ -1,10 +1,10 @@
 {
-   "name": "豆瓣",
-   "version": 6,
-   "remark": "🍃",
-   "webSite": "https://movie.douban.com",
-   "codeID": "",
-   "api": "https://raw.githubusercontent.com/474352134-wq/uz-LHM/refs/heads/main/douban.js",
-   "logo": "",
-   "type": 101
+  "name": "豆瓣",
+  "version": 6,
+  "remark": "🍃",
+  "webSite": "https://movie.douban.com",
+  "codeID": "",
+  "api": "https://raw.githubusercontent.com/474352134-wq/uz-LHM/refs/heads/main/douban.js",
+  "logo": "",
+  "type": 101
 }
