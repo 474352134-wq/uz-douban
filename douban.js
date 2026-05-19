@@ -1,5 +1,5 @@
 //@name:豆瓣推荐 (腾讯源)
-//@version:14
+//@version:15
 //@webSite:https://v.qq.com
 //@remark:适配UZ影视规范，抓取腾讯视频数据
 //@order:A01
